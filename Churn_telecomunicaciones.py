@@ -7,7 +7,6 @@ import numpy as np
 import streamlit as st
 import pandas as pd
 import joblib
-from sklearn.preprocessing import MinMaxScaler
 # In[4]:
 
 st.markdown(
@@ -38,8 +37,20 @@ st.markdown(
     """,
     unsafe_allow_html=True
 )
+
+with st.sidebar.expander("Características del modelo"):
+    st.write("""
+ El modelo es un XGBoost con un threshold de 0.45. Se entrenó con 3000 datos históricos de una compañía de telecomunicaciones
+""")
                                           
-predictor = joblib.load("modelo_smote_1.pkl")
+                                          
+predictor = joblib.load("modelo_xgboost.pkl")
+scaler = joblib.load("scaler_churn.pkl")
+
+col = ['Call  Failure', 'Complains', 'Subscription  Length', 'Charge  Amount',
+       'Seconds of Use', 'Frequency of use', 'Frequency of SMS',
+       'Distinct Called Numbers','Customer Value']
+cols_log=['Distinct Called Numbers', 'Seconds of Use', 'Frequency of use', 'Frequency of SMS', 'Customer Value']
 
 with st.container():
     c1, c2, c3 = st.columns([1,6,1]) 
@@ -67,7 +78,7 @@ with st.container():
         
     
     with col2:
-        age_group = st.selectbox("Age Group", [1, 2, 3, 4, 5])
+        age_group = st.selectbox("Age Group", [1, 2, 3, 4, 5, 6])
         customer_value = st.number_input("Customer Value", min_value=0.0)
     
     with col3:
@@ -77,7 +88,7 @@ with st.container():
     
     with col4:
         complains = st.selectbox("Complains", [0, 1])
-        charge_amount = st.number_input("Charge Amount", min_value=0.0)
+        charge_amount = st.selectbox("Charge Amount", [0, 10])
     
     
     with col5:
@@ -104,32 +115,59 @@ with co1:
             'Customer Value','Distinct Called Numbers','Call  Failure',
             'Frequency of use','Frequency of SMS','Charge  Amount'
         ])
-    
-        pred = predictor.predict(X_new)[0]
+            
+        X_new[cols_log] = np.log1p(X_new[cols_log])
+        X_new[col] = scaler.transform(X_new[col])
+        
+             
+        threshold = 0.45
+        
         probas = predictor.predict_proba(X_new)[0]
+        churn = probas[1]
+        pred = (churn >= threshold)    
+            
+        if pred == 0:
+            resultado = "Riesgo bajo de abandono"
+            st.success(resultado)
+        else:
+            resultado = "Riesgo alto de abandono"
+            st.warning(resultado)
         st.markdown("---")  
-        st.write("📊 Probabilidad de que el cliente no deje el servicio:", round(probas[0]*100,2), "%")
-        st.write("📊 Probabilidad de que el cliente deje el servicio:", round(probas[1]*100,2), "%")
+        st.write("📊 Probabilidad de que el cliente no deje el servicio:", f"{probas[0]*100:.2f} %")
+        st.write("📊 Probabilidad de que el cliente deje el servicio:", f"{probas[1]*100:.2f} %")
 
 
 with co2:
     if st.button("Generar caso aleatorio"):
         X_random = pd.DataFrame([[
             np.random.choice([0,1]), np.random.choice([0,1]), np.random.randint(0,17090),
-            np.random.randint(1,5), np.random.randint(1,47),
+            np.random.randint(1,6), np.random.randint(1,47),
             np.random.uniform(0,2165.28), np.random.randint(0,97), np.random.randint(0,36),
-            np.random.randint(0,255), np.random.randint(0,522), np.random.uniform(0,10)
+            np.random.randint(0,255), np.random.randint(0,522), np.random.randint(0,11)
         ]], columns=[
             'Status','Complains','Seconds of Use','Age Group','Subscription  Length',
             'Customer Value','Distinct Called Numbers','Call  Failure',
             'Frequency of use','Frequency of SMS','Charge  Amount'
         ])
     
-        pred = predictor.predict(X_random)[0]
-        probas = predictor.predict_proba(X_random)[0]
-        st.markdown("---") 
-    
+        X_random_transformado= X_random.copy()
+        X_random_transformado[cols_log] = np.log1p(X_random_transformado[cols_log])
+        X_random_transformado[col] = scaler.transform(X_random_transformado[col])
+        threshold = 0.45
         
-        st.write("📊 Probabilidad de que el cliente no deje el servicio:", round(probas[0]*100,2), "%")
-        st.write("📊 Probabilidad de que el cliente deje el servicio:", round(probas[1]*100,2), "%")
+        probas = predictor.predict_proba(X_random_transformado)[0]
+        churn = probas[1]
+        pred = (churn >= threshold)    
+            
+        
+        resutado = []
+        if pred == 0:
+            resultado = "Riesgo bajo de abandono"
+            st.success(resultado)
+        else:
+            resultado = "Riesgo alto de abandono"
+            st.warning(resultado)
+        st.markdown("---")  
+        st.write("📊 Probabilidad de que el cliente no deje el servicio:", f"{probas[0]*100:.2f} %")
+        st.write("📊 Probabilidad de que el cliente deje el servicio:", f"{probas[1]*100:.2f} %")
         st.write("🎲 Valores generados:", X_random)
